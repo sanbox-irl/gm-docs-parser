@@ -1,3 +1,7 @@
+use std::path::Path;
+
+mod parse_fnames;
+
 fn main() {
-    println!("Hello, world!");
+    parse_fnames::parse_fnames(Path::new("data"));
 }
