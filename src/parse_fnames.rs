@@ -7,13 +7,11 @@ use std::{
 
 const HELPDOCS_PATH: &str = "helpdocs_keywords.json";
 
-pub fn parse_fnames(dir: &Path) {
+pub fn parse_fnames(dir: &Path) -> Vec<PathBuf> {
     let path = dir.join(Path::new(HELPDOCS_PATH));
 
     let map: HashMap<String, PathBuf> =
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    for (key, value) in map {
-        if key == "Buffers" {
-        }
-    }
+
+    map.into_iter().map(|v| dir.join(&v.1)).collect()
 }
