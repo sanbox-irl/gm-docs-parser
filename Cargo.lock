@@ -120,6 +120,7 @@ dependencies = [
 name = "gm-docs-parser"
 version = "0.1.0"
 dependencies = [
+ "ego-tree",
  "scraper",
  "selectors",
  "serde",

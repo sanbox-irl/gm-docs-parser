@@ -5,10 +5,9 @@ mod parse_file;
 mod parse_fnames;
 
 fn main() {
-    let _ = parse_fnames::parse_fnames(Path::new("data"));
-    let x = Some(3);
+    let fnames = parse_fnames::parse_fnames(Path::new("data"));
 
-    parse_file::parse_function_file(Path::new(
-        "data/GameMaker_Language/GML_Reference/Drawing/Sprites_And_Tiles/draw_sprite.htm",
-    ));
+    for fname in fnames {
+        parse_file::parse_function_file(&fname);
+    }
 }
