@@ -5,7 +5,7 @@ pub struct GmFunction {
     /// The name of the function
     pub name: String,
 
-    /// The parameters of the function. 
+    /// The parameters of the function.
     pub parameters: Vec<GmParameter>,
 
     /// The count of the number of required parameters.
@@ -16,7 +16,7 @@ pub struct GmFunction {
     pub is_variadic: bool,
 
     /// The example given in the Manual.
-    pub example: GmExample,
+    pub example: String,
 
     /// The description of what the function does.
     pub description: String,
@@ -24,18 +24,12 @@ pub struct GmFunction {
     /// What the function returns.
     pub returns: String,
 
-    /// The link to the webpage. For now, 
+    /// The link to the webpage. For now,
     pub link: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default)]
 pub struct GmParameter {
     pub parameter: String,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default)]
-pub struct GmExample {
-    pub code: String,
     pub description: String,
 }
