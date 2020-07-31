@@ -1,12 +1,13 @@
+use log::info;
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
 };
 
 const HELPDOCS_PATH: &str = "helpdocs_keywords.json";
 
-pub fn parse_fnames(dir: &Path) -> Vec<PathBuf> {
+pub fn parse_fnames(dir: &Path) -> BTreeSet<PathBuf> {
     let path = dir.join(Path::new(HELPDOCS_PATH));
 
     let map: HashMap<String, PathBuf> =
@@ -14,7 +15,12 @@ pub fn parse_fnames(dir: &Path) -> Vec<PathBuf> {
 
     map.into_iter()
         .filter_map(|(name, fpath)| {
-            if name.contains(char::is_uppercase) {
+            if name.contains(char::is_uppercase)
+                || fpath
+                    .file_name()
+                    .map(|fname| fname.to_string_lossy().contains(char::is_uppercase))
+                    .unwrap_or_default()
+            {
                 return None;
             }
             if fpath

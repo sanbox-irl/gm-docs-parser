@@ -1,12 +1,18 @@
-use crate::{GmFunction, GmParameter};
+use crate::{FunctionDoc, GmFunctionParameter};
 use ego_tree::NodeRef;
 use log::*;
 use scraper::{html::Select, Html, Node, Selector};
-use selectors::attr::CaseSensitivity;
+// use selectors::attr::CaseSensitivity;
+use gm_docs_parser::{ConstantDoc, VariableDoc};
 use std::ops::Deref;
 use std::path::Path;
 
-pub fn parse_function_file(fpath: &Path) -> Option<GmFunction> {
+pub enum DocEntry {
+    Function(FunctionDoc),
+    Variable(VariableDoc),
+}
+
+pub fn parse_function_file(fpath: &Path, constants: &mut Vec<ConstantDoc>) -> Option<DocEntry> {
     trace!("{:?}", fpath);
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
     let h1_sel = Selector::parse("h1").unwrap();
@@ -18,28 +24,43 @@ pub fn parse_function_file(fpath: &Path) -> Option<GmFunction> {
     let returns = parse_returns(&mut h4_select);
     let example = parse_example(&mut h4_select);
 
+    // attempt to parse for constants -- this is basically unrelated to anything else
+    let table_sel = Selector::parse("table").unwrap();
+    parse_constants(&doc, &table_sel, constants);
+
     // did we fuckin nail it?
-    let all_success = name_description.is_some()
-        && parameters.is_some()
-        && example.is_some()
-        && returns.is_some();
+    let all_success = name_description.is_some() && example.is_some() && returns.is_some();
     if all_success {
-        let (parameters, required_parameters, is_variadic) = parameters.unwrap();
         let (name, description) = name_description.unwrap();
-        let f = GmFunction {
-            name,
-            parameters,
-            is_variadic,
-            required_parameters,
-            example: example.unwrap(),
-            description,
-            returns: returns.unwrap(),
-            link: fpath.to_path_buf(),
+
+        let output = match parameters.unwrap() {
+            Data::Function {
+                parameters,
+                required_parameters,
+                is_variadic,
+            } => DocEntry::Function(FunctionDoc {
+                name,
+                parameters,
+                is_variadic,
+                required_parameters,
+                example: example.unwrap(),
+                description,
+                returns: returns.unwrap(),
+                link: fpath.to_path_buf(),
+            }),
+            Data::Variable => DocEntry::Variable(VariableDoc {
+                name,
+                example: example.unwrap(),
+                description,
+                returns: returns.unwrap(),
+                link: fpath.to_path_buf(),
+            }),
         };
-        Some(f)
+
+        Some(output)
     } else {
         error!(
-            "FAIL! {:?}\n silent..name_desc [{}], parameters [{}], example [{}], returns [{}]",
+            "FAIL! {:?}\n..name_desc [{}], parameters [{}], example [{}], returns [{}]",
             fpath,
             if name_description.is_some() { "X" } else { " " },
             if parameters.is_some() { "X" } else { " " },
@@ -65,104 +86,120 @@ fn parse_name_and_description(doc: &Html, h1_sel: &Selector) -> Option<(String, 
     Some((name, description))
 }
 
-fn parse_parameters(select: &mut Select) -> Option<(Vec<GmParameter>, usize, bool)> {
-    select.next().and_then(|syntax| {
-        let mut syntax_output = String::new();
-        flatten_element_into_markdown(&syntax.first_child()?, &mut syntax_output);
-        syntax_output.make_ascii_lowercase();
-        if syntax_output.contains("syntax") == false {
-            return None;
-        }
+enum Data {
+    Function {
+        parameters: Vec<GmFunctionParameter>,
+        required_parameters: usize,
+        is_variadic: bool,
+    },
+    Variable,
+}
 
-        let mut syntax_siblings = syntax.next_siblings();
+fn parse_parameters(select: &mut Select) -> Option<Data> {
+    select
+        .find(|v| {
+            v.first_child()
+                .map(|child| {
+                    let mut syntax_output = String::new();
+                    flatten_element_into_markdown(&child, &mut syntax_output);
+                    syntax_output.make_ascii_lowercase();
+                    syntax_output.contains("syntax")
+                })
+                .unwrap_or_default()
+        })
+        .and_then(|syntax| {
+            let mut syntax_siblings = syntax.next_siblings();
 
-        // let mut parameter_status = vec![];
+            // let mut parameter_status = vec![];
 
-        syntax_siblings.next(); // skip newline
+            syntax_siblings.next(); // skip newline
 
-        // parse the signature for optionals...
-        let signature = syntax_siblings.next()?;
-        if signature
-            .value()
-            .as_element()?
-            .has_class("code", CaseSensitivity::AsciiCaseInsensitive)
-            == false
-        {
-            return None;
-        }
+            // parse the signature for optionals...
+            let signature = syntax_siblings.next()?;
 
-        let mut sig = String::new();
-        flatten_element_into_markdown(&signature, &mut sig);
-        let (mut param_guesses, mut variadic) = parse_signature(&sig);
+            let mut sig = String::new();
+            flatten_element_into_markdown(&signature, &mut sig);
+            let (mut param_guesses, mut variadic, is_function) = parse_signature(&sig);
+            if is_function == false {
+                return Some(Data::Variable);
+            }
 
-        syntax_siblings.next(); // skip newline
+            syntax_siblings.next(); // skip newline
 
-        syntax_siblings
-            .find(|table| {
-                table
-                    .value()
-                    .as_element()
-                    .map(|v| v.name() == "table")
-                    .unwrap_or_default()
-            })
-            .and_then(|table| {
-                let mut parameters = vec![];
+            syntax_siblings
+                .find(|table| {
+                    table
+                        .value()
+                        .as_element()
+                        .map(|v| v.name() == "table")
+                        .unwrap_or_default()
+                })
+                .and_then(|table| {
+                    let mut parameters = vec![];
 
-                for tr in table.children().nth(1)?.children() {
-                    if let Node::Element(_) = tr.value() {
-                        let is_table_data = tr.children().all(|v| match v.value() {
-                            Node::Element(e) => e.name() == "td",
-                            // for the silly `\n` children
-                            Node::Text(_) => true,
-                            _ => false,
-                        });
+                    for tr in table.children().nth(1)?.children() {
+                        if let Node::Element(_) = tr.value() {
+                            let is_table_data = tr.children().all(|v| match v.value() {
+                                Node::Element(e) => e.name() == "td",
+                                // for the silly `\n` children
+                                Node::Text(_) => true,
+                                _ => false,
+                            });
 
-                        if is_table_data {
-                            let mut gm_parameter = GmParameter::default();
-                            let mut td = tr.children();
-                            td.next(); // newline
-                                       // gm_parameter.parameter =
-                                       //     td.next()?.first_child()?.value().as_text()?.to_string();
+                            if is_table_data {
+                                let mut gm_parameter = GmFunctionParameter::default();
+                                let mut td = tr.children();
+                                td.next(); // newline
+                                           // gm_parameter.parameter =
+                                           //     td.next()?.first_child()?.value().as_text()?.to_string();
 
-                            flatten_element_into_markdown(&td.next()?, &mut gm_parameter.parameter);
+                                flatten_element_into_markdown(
+                                    &td.next()?,
+                                    &mut gm_parameter.parameter,
+                                );
 
-                            td.next(); // newline
+                                td.next(); // newline
 
-                            flatten_element_into_markdown(
-                                &td.next()?,
-                                &mut gm_parameter.description,
-                            );
+                                flatten_element_into_markdown(
+                                    &td.next()?,
+                                    &mut gm_parameter.description,
+                                );
 
-                            let is_optional = gm_parameter.parameter.contains("optional")
-                                || gm_parameter.parameter.contains("Optional")
-                                || gm_parameter.description.contains("optional")
-                                || gm_parameter.description.contains("Optional");
+                                let is_optional = gm_parameter.parameter.contains("optional")
+                                    || gm_parameter.parameter.contains("Optional")
+                                    || gm_parameter.description.contains("optional")
+                                    || gm_parameter.description.contains("Optional");
 
-                            let is_variadic = gm_parameter.parameter.contains("..")
-                                || gm_parameter.description.contains("..");
+                                let is_variadic = gm_parameter.parameter.contains("..")
+                                    || gm_parameter.description.contains("..");
 
-                            if is_variadic && variadic == false {
-                                variadic = true;
+                                if is_variadic && variadic == false {
+                                    variadic = true;
+                                }
+
+                                if param_guesses.len() <= parameters.len() {
+                                    param_guesses.push(false);
+                                }
+
+                                if param_guesses[parameters.len()] == false && is_optional {
+                                    param_guesses[parameters.len()] = is_optional;
+                                }
+
+                                parameters.push(gm_parameter);
                             }
-
-                            if param_guesses.len() <= parameters.len() {
-                                param_guesses.push(false);
-                            }
-
-                            if param_guesses[parameters.len()] == false && is_optional {
-                                param_guesses[parameters.len()] = is_optional;
-                            }
-
-                            parameters.push(gm_parameter);
                         }
                     }
-                }
 
-                let min_parameters = param_guesses.iter().position(|v| *v).unwrap_or_default();
+                    let minimum_parameters =
+                        param_guesses.iter().position(|v| *v).unwrap_or_default();
 
-                Some((parameters, min_parameters, variadic))
-            })
-    })
+                    Some(Data::Function {
+                        parameters,
+                        required_parameters: minimum_parameters,
+                        is_variadic: variadic,
+                    })
+                })
+        })
 }
 
 fn parse_example(select: &mut Select) -> Option<String> {
@@ -231,19 +268,11 @@ fn parse_returns(select: &mut Select) -> Option<String> {
             returns_siblings.next(); // skip newline
             let returns = returns_siblings.next()?;
 
-            if returns
-                .value()
-                .as_element()?
-                .has_class("code", CaseSensitivity::AsciiCaseInsensitive)
-            {
-                if let Some(child) = returns.first_child() {
-                    if let Node::Text(txt) = child.value() {
-                        return Some(txt.to_string());
-                    }
-                }
-            }
+            let mut output = String::new();
 
-            None
+            flatten_element_into_markdown(&returns, &mut output);
+
+            Some(output)
         })
 }
 
@@ -255,12 +284,27 @@ fn flatten_element_into_markdown(container: &NodeRef<Node>, output: &mut String)
 
     let this_container = container.value().as_element().unwrap();
     let md = match this_container.name() {
-        "i" => Markdown::Italic,
-        "b" => Markdown::Bold,
+        "i" | "em" => Markdown::Italic,
+        "b" | "strong" | "h4" => Markdown::Bold,
         "a" => {
             if let Some(val) = this_container.attr("href") {
                 Markdown::Hyperlink(val.to_string())
+            } else if let Some(val) = this_container.attr("class") {
+                if val == "tooltip" {
+                    Markdown::Tooltip(val.to_string())
+                } else {
+                    Markdown::Plain
+                }
             } else {
+                // like what is going on here...
+                Markdown::Plain
+            }
+        }
+        "img" => {
+            if let Some(val) = this_container.attr("src") {
+                Markdown::Hyperlink(val.to_string())
+            } else {
+                error!("We had an <img> with no alt!");
                 Markdown::Plain
             }
         }
@@ -272,9 +316,9 @@ fn flatten_element_into_markdown(container: &NodeRef<Node>, output: &mut String)
             }
         }
         "tt" => Markdown::CodeSnippet,
-        "td" | "br" => Markdown::Plain,
+        "td" | "br" | "span" => Markdown::Plain,
         o => {
-            warn!("Unknown tag encountered {}", o);
+            error!("Unknown tag encountered {}", o);
             Markdown::Plain
         }
     };
@@ -299,6 +343,7 @@ fn write_in_md(txt_desc: Markdown, txt: &str, buf: &mut String) {
         Markdown::Hyperlink(dest) => {
             buf.push_str(&format!("[{}]({})", txt, dest));
         }
+        Markdown::Tooltip(dest) => buf.push_str(&format!("{} ({})", txt, dest)),
         Markdown::Plain => {
             buf.push_str(txt);
         }
@@ -327,13 +372,13 @@ fn write_in_md(txt_desc: Markdown, txt: &str, buf: &mut String) {
     }
 }
 
-fn parse_signature(sig: &str) -> (Vec<bool>, bool) {
+fn parse_signature(sig: &str) -> (Vec<bool>, bool, bool) {
     let start = sig.find('(');
     let end = sig.find(')');
 
     let succeeded = start.is_some() && end.is_some();
     if succeeded == false {
-        return (vec![], false);
+        return (vec![], false, false);
     }
     let start = start.unwrap();
     let end = end.unwrap();
@@ -370,12 +415,46 @@ fn parse_signature(sig: &str) -> (Vec<bool>, bool) {
         }
     }
 
-    (output, variadic)
+    (output, variadic, true)
+}
+
+fn parse_constants(
+    doc: &Html,
+    constant_selector: &Selector,
+    constants: &mut Vec<ConstantDoc>,
+) -> Option<()> {
+    for table in doc.select(constant_selector) {
+        let table_body = table.first_child()?;
+
+        let mut trs = table_body.children();
+        let first_tr = trs.next()?;
+
+        for child in first_tr.children() {
+            if child.value()
+        }
+
+        for tr in table_body.children() {
+            if let Node::Element(_) = tr.value() {
+                let is_table_data = tr.children().all(|v| match v.value() {
+                    Node::Element(e) => match e.name() {
+                        "x" => {}
+                        _ => continue,
+                    },
+                    // for the silly `\n` children
+                    Node::Text(_) => true,
+                    _ => false,
+                });
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Markdown {
     Hyperlink(String),
+    Tooltip(String),
     Plain,
     Bold,
     Italic,
@@ -395,7 +474,7 @@ mod tests {
     #[test]
     fn signature_test() {
         fn harness(sig: &str, optionals: Vec<bool>, is_variadic: bool) {
-            let (options, variadic) = parse_signature(sig);
+            let (options, variadic, _) = parse_signature(sig);
             assert_eq!(options, optionals);
             assert_eq!(variadic, is_variadic);
         }
@@ -444,39 +523,31 @@ mod tests {
         );
     }
 
-    #[test]
-    fn full_param_tests() {
-        let _ = env_logger::try_init();
+    // #[test]
+    // fn full_param_tests() {
+    //     let _ = env_logger::try_init();
 
-        fn harness(path: &str, required_parameters: usize, is_variadic: bool) {
-            println!("parsing {}...", path);
-            let parsed = Path::new(path);
+    //     fn harness(path: &str, required_parameters: usize, is_variadic: bool) {
+    //         println!("parsing {}...", path);
+    //         let parsed = Path::new(path);
 
-            let gm_func =
-                parse_function_file(parsed).unwrap_or_else(|| panic!("couldn't parse {}", path));
-            assert_eq!(gm_func.required_parameters, required_parameters);
-            assert_eq!(gm_func.is_variadic, is_variadic);
-        }
+    //         let gm_func =
+    //             parse_function_file(parsed).unwrap_or_else(|| panic!("couldn't parse {}", path));
+    //         assert_eq!(gm_func.required_parameters, required_parameters);
+    //         assert_eq!(gm_func.is_variadic, is_variadic);
+    //     }
 
-        harness(
-            "data/GameMaker_Language/GML_Reference/Variable_Functions/array_create.htm",
-            1,
-            false,
-        );
-        harness("data/GameMaker_Language/GML_Reference/Cameras_And_Display/display_set_gui_maximise.htm", 0, false);
+    //     harness(
+    //         "data/GameMaker_Language/GML_Reference/Variable_Functions/array_create.htm",
+    //         1,
+    //         false,
+    //     );
+    //     harness("data/GameMaker_Language/GML_Reference/Cameras_And_Display/display_set_gui_maximise.htm", 0, false);
 
-        harness(
-            "data/GameMaker_Language/GML_Reference/Cameras_And_Display/gif_add_surface.htm",
-            3,
-            false,
-        );
-    }
-
-    #[test]
-    fn select_cases() {
-        let _ = env_logger::try_init();
-
-        parse_function_file(Path::new("data\\GameMaker_Language\\GML_Reference\\Asset_Management\\Objects\\Object_Events\\event_perform.htm")).unwrap();
-        parse_function_file(Path::new("data\\GameMaker_Language\\GML_Reference\\Game_Input\\Keyboard_Input\\keyboard_get_map.htm")).unwrap();
-    }
+    //     harness(
+    //         "data/GameMaker_Language/GML_Reference/Cameras_And_Display/gif_add_surface.htm",
+    //         3,
+    //         false,
+    //     );
+    // }
 }

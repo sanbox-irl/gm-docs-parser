@@ -11,7 +11,14 @@ fn main() {
 
     let fnames = parse_fnames::parse_fnames(Path::new("data"));
 
+    let mut output = vec![];
+    let mut constants = vec![];
     for fname in fnames {
-        parse_file::parse_function_file(&fname);
+        if let Some(success) = parse_file::parse_function_file(&fname, &mut constants) {
+            output.push(success);
+        }
     }
+
+    // let st = serde_json::to_string_pretty(&output).unwrap();
+    // std::fs::write("out.json", st).unwrap();
 }
