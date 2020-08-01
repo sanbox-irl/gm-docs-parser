@@ -1,7 +1,7 @@
 use crate::{FunctionDoc, GmFunctionParameter};
 use ego_tree::NodeRef;
 use log::*;
-use scraper::{html::Select, Html, Node, Selector};
+use scraper::{html::Select, node::Element, Html, Node, Selector};
 // use selectors::attr::CaseSensitivity;
 use gm_docs_parser::{ConstantDoc, VariableDoc};
 use std::ops::Deref;
@@ -304,7 +304,7 @@ fn flatten_element_into_markdown(container: &NodeRef<Node>, output: &mut String)
             if let Some(val) = this_container.attr("src") {
                 Markdown::Hyperlink(val.to_string())
             } else {
-                error!("We had an <img> with no alt!");
+                error!("We had an <img> with no src!");
                 Markdown::Plain
             }
         }
@@ -323,18 +323,26 @@ fn flatten_element_into_markdown(container: &NodeRef<Node>, output: &mut String)
         }
     };
 
+    let mut wrote = false;
+
     for child in container.children() {
         match child.value() {
             Node::Text(txt) => {
                 write_in_md(md.clone(), txt, output);
+                wrote = true;
             }
             Node::Element(_) => {
                 let mut buff = String::new();
                 flatten_element_into_markdown(&child, &mut buff);
                 write_in_md(md.clone(), &buff, output);
+                wrote = true;
             }
             _ => continue,
         }
+    }
+
+    if wrote == false {
+        emergency_write_in_md(md, this_container, output);
     }
 }
 
@@ -372,6 +380,13 @@ fn write_in_md(txt_desc: Markdown, txt: &str, buf: &mut String) {
     }
 }
 
+fn emergency_write_in_md(txt_desc: Markdown, e: &Element, buf: &mut String) {
+    if let Markdown::Hyperlink(dest) = txt_desc {
+        if let Some(txt) = e.attr("alt") {
+            buf.push_str(&format!("[{}]({})", txt, dest));
+        }
+    }
+}
 fn parse_signature(sig: &str) -> (Vec<bool>, bool, bool) {
     let start = sig.find('(');
     let end = sig.find(')');
@@ -424,28 +439,65 @@ fn parse_constants(
     constants: &mut Vec<ConstantDoc>,
 ) -> Option<()> {
     for table in doc.select(constant_selector) {
-        let table_body = table.first_child()?;
+        let table_body = table.children().nth(1).unwrap();
 
         let mut trs = table_body.children();
-        let first_tr = trs.next()?;
 
-        for child in first_tr.children() {
-            if child.value()
+        // skip the newline
+        trs.next(); // bye bye bitch
+
+        // find the header...
+        let is_constant = trs
+            .next()
+            .and_then(|header| {
+                header.children().find(|c| {
+                    if let Some(e) = c.value().as_element() {
+                        e.name() == "th"
+                    } else {
+                        false
+                    }
+                })
+            })
+            .map(|th| {
+                th.first_child()
+                    .map(|header_v| {
+                        let mut header = String::new();
+                        flatten_element_into_markdown(&header_v, &mut header);
+
+                        header.make_ascii_lowercase();
+
+                        header.contains("constant")
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        if is_constant == false {
+            continue;
         }
 
-        for tr in table_body.children() {
+        for tr in trs {
             if let Node::Element(_) = tr.value() {
-                let is_table_data = tr.children().all(|v| match v.value() {
-                    Node::Element(e) => match e.name() {
-                        "x" => {}
-                        _ => continue,
-                    },
-                    // for the silly `\n` children
-                    Node::Text(_) => true,
-                    _ => false,
-                });
+                let mut constant_doc = ConstantDoc::default();
+                let mut td = tr.children();
+                td.next(); // newline
+                           // gm_parameter.parameter =
+                           //     td.next()?.first_child()?.value().as_text()?.to_string();
+
+                flatten_element_into_markdown(&td.next()?, &mut constant_doc.name);
+
+                td.next(); // newline
+
+                let nxt = &td.next()?;
+                println!("{:#?}", nxt.value());
+                flatten_element_into_markdown(nxt, &mut constant_doc.description);
+
+                println!("{:#?}", constant_doc);
             }
         }
+
+        // for tr in table_body.children() {
+        // }
     }
 
     None
@@ -523,31 +575,17 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn full_param_tests() {
-    //     let _ = env_logger::try_init();
+    #[test]
+    fn consts() {
+        fn harness(p: &str) {
+            let doc = Html::parse_document(&std::fs::read_to_string(&p).unwrap());
 
-    //     fn harness(path: &str, required_parameters: usize, is_variadic: bool) {
-    //         println!("parsing {}...", path);
-    //         let parsed = Path::new(path);
+            let table_sel = Selector::parse("table").unwrap();
+            let mut consts = vec![];
 
-    //         let gm_func =
-    //             parse_function_file(parsed).unwrap_or_else(|| panic!("couldn't parse {}", path));
-    //         assert_eq!(gm_func.required_parameters, required_parameters);
-    //         assert_eq!(gm_func.is_variadic, is_variadic);
-    //     }
+            parse_constants(&doc, &table_sel, &mut consts).unwrap();
+        }
 
-    //     harness(
-    //         "data/GameMaker_Language/GML_Reference/Variable_Functions/array_create.htm",
-    //         1,
-    //         false,
-    //     );
-    //     harness("data/GameMaker_Language/GML_Reference/Cameras_And_Display/display_set_gui_maximise.htm", 0, false);
-
-    //     harness(
-    //         "data/GameMaker_Language/GML_Reference/Cameras_And_Display/gif_add_surface.htm",
-    //         3,
-    //         false,
-    //     );
-    // }
+        harness("data\\GameMaker_Language\\GML_Reference\\Drawing\\Text\\draw_get_halign.htm");
+    }
 }
