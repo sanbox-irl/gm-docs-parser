@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 pub struct FunctionDoc {
@@ -50,14 +50,21 @@ pub struct VariableDoc {
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 pub struct ConstantDoc {
     /// The name of the constant
-    pub name: String,
+    pub constant: String,
 
     /// A description of the constant
     pub description: String,
+
+    /// Additional descriptors present. Most of the time, this will be None, but can
+    /// have some Descriptors and Values present.
+    pub secondary_description: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 pub struct GmFunctionParameter {
+    /// The name of the parameter.
     pub parameter: String,
+
+    /// A description given of the parameter.
     pub description: String,
 }

@@ -24,6 +24,16 @@ fn main() {
 
     println!("{:#?}", output);
 
+    let x = NameDescription {
+        name: "hello".to_string(),
+        description: "one".to_string(),
+        secondary_description: Some(NameDescription {
+            name: "two".to_string(),
+            description: "three".to_string(),
+            secondary_description: None,
+        }),
+    };
+
     // let st = serde_json::to_string_pretty(&output).unwrap();
     // std::fs::write("out.json", st).unwrap();
 }
