@@ -12,10 +12,7 @@
 				"RUST_BACKTRACE": "1",
 				"RUST_LOG": "info"
 			},
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
+			"group": "build",
 			"runOptions": {
 				"reevaluateOnRerun": true
 			},

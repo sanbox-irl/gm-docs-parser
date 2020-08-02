@@ -1,6 +1,5 @@
-use log::info;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -10,7 +9,7 @@ const HELPDOCS_PATH: &str = "helpdocs_keywords.json";
 pub fn parse_fnames(dir: &Path) -> BTreeSet<PathBuf> {
     let path = dir.join(Path::new(HELPDOCS_PATH));
 
-    let map: HashMap<String, PathBuf> =
+    let map: BTreeMap<String, PathBuf> =
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
 
     map.into_iter()

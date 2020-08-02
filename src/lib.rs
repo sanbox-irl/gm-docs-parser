@@ -1,13 +1,20 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
-pub struct FunctionDoc {
+pub struct GmManual {
+    pub functions: BTreeMap<String, GmManualFunction>,
+    pub variables: BTreeMap<String, GmManualVariable>,
+    pub constants: BTreeMap<String, GmManualConstant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+pub struct GmManualFunction {
     /// The name of the function
     pub name: String,
 
     /// The parameters of the function.
-    pub parameters: Vec<GmFunctionParameter>,
+    pub parameters: Vec<GmManualFunctionParameter>,
 
     /// The count of the number of required parameters.
     pub required_parameters: usize,
@@ -30,7 +37,7 @@ pub struct FunctionDoc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
-pub struct VariableDoc {
+pub struct GmManualVariable {
     /// The name of the variable
     pub name: String,
 
@@ -48,23 +55,23 @@ pub struct VariableDoc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
-pub struct ConstantDoc {
+pub struct GmManualFunctionParameter {
+    /// The name of the parameter.
+    pub parameter: String,
+
+    /// A description given of the parameter.
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+pub struct GmManualConstant {
     /// The name of the constant
-    pub constant: String,
+    pub name: String,
 
     /// A description of the constant
     pub description: String,
 
     /// Additional descriptors present. Most of the time, this will be None, but can
     /// have some Descriptors and Values present.
-    pub secondary_description: Option<HashMap<String, String>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
-pub struct GmFunctionParameter {
-    /// The name of the parameter.
-    pub parameter: String,
-
-    /// A description given of the parameter.
-    pub description: String,
+    pub secondary_description: Option<BTreeMap<String, String>>,
 }
