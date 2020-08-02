@@ -1,8 +1,7 @@
-use crate::Markdown;
+use crate::{parse_fnames::convert_to_url, Markdown};
+use gm_docs_parser::{GmManualFunction, GmManualFunctionParameter, GmManualVariable};
 use log::*;
 use scraper::{html::Select, Html, Node, Selector};
-// use selectors::attr::CaseSensitivity;
-use gm_docs_parser::{GmManualFunction, GmManualFunctionParameter, GmManualVariable};
 use std::ops::Deref;
 use std::path::Path;
 
@@ -12,7 +11,7 @@ pub enum DocEntry {
     Variable(GmManualVariable),
 }
 
-pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
+pub fn parse_function_file(fpath: &Path, base: &Path) -> Option<DocEntry> {
     trace!("{:?}", fpath);
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
     let h1_sel = Selector::parse("h1").unwrap();
@@ -32,6 +31,7 @@ pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
     let all_success = name_description.is_some() && example.is_some() && returns.is_some();
     if all_success {
         let (name, description) = name_description.unwrap();
+        let link = convert_to_url(base, fpath);
 
         let output = match parameters {
             Data::Function {
@@ -46,14 +46,14 @@ pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
                 example: example.unwrap(),
                 description,
                 returns: returns.unwrap(),
-                link: fpath.to_path_buf(),
+                link,
             }),
             Data::Variable => DocEntry::Variable(GmManualVariable {
                 name,
                 example: example.unwrap(),
                 description,
                 returns: returns.unwrap(),
-                link: fpath.to_path_buf(),
+                link,
             }),
         };
 

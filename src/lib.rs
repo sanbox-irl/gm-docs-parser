@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
+use url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GmManual {
     pub functions: BTreeMap<String, GmManualFunction>,
     pub variables: BTreeMap<String, GmManualVariable>,
     pub constants: BTreeMap<String, GmManualConstant>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GmManualFunction {
     /// The name of the function
     pub name: String,
@@ -32,11 +33,11 @@ pub struct GmManualFunction {
     /// What the function returns.
     pub returns: String,
 
-    /// The link to the webpage. For now,just to the "data" page.
-    pub link: PathBuf,
+    /// The link to the webpage.
+    pub link: Url,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GmManualVariable {
     /// The name of the variable
     pub name: String,
@@ -50,8 +51,8 @@ pub struct GmManualVariable {
     /// The type of the variable.
     pub returns: String,
 
-    /// The link to the webpage. For now,just to the "data" page.
-    pub link: PathBuf,
+    /// The link to the webpage.
+    pub link: Url,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
@@ -63,13 +64,16 @@ pub struct GmManualFunctionParameter {
     pub description: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GmManualConstant {
     /// The name of the constant
     pub name: String,
 
     /// A description of the constant
     pub description: String,
+
+    /// The link to the webpage.
+    pub link: Url,
 
     /// Additional descriptors present. Most of the time, this will be None, but can
     /// have some Descriptors and Values present.

@@ -19,7 +19,7 @@ fn main() {
     let mut variables = vec![];
 
     for fname in fnames {
-        if let Some(success) = parse_file::parse_function_file(&fname) {
+        if let Some(success) = parse_file::parse_function_file(&fname, base_path) {
             match success {
                 parse_file::DocEntry::Function(v) => {
                     functions.push(v);

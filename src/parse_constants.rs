@@ -1,8 +1,9 @@
-use super::Markdown;
+use crate::{parse_fnames::convert_to_url, Markdown};
 use fehler::throws;
 use gm_docs_parser::*;
 use scraper::{ElementRef, Html, Node, Selector};
 use std::path::Path;
+use url::Url;
 
 #[throws(Box<dyn std::error::Error>)]
 pub fn parse_constants(base_path: &Path, constants: &mut Vec<GmManualConstant>) {
@@ -15,21 +16,26 @@ pub fn parse_constants(base_path: &Path, constants: &mut Vec<GmManualConstant>) 
         } else if file_type.is_file() {
             let path = file.path();
             if path.extension().map(|e| e == "htm").unwrap_or_default() {
-                parse_constant(&file.path(), constants);
+                parse_constant(&file.path(), base_path, constants);
             }
         }
     }
 }
 
 #[allow(dead_code)]
-fn parse_constant(fpath: &Path, constants: &mut Vec<GmManualConstant>) {
+fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualConstant>) {
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
 
     for table in doc.select(&Selector::parse("table").unwrap()) {
-        parse_inner(table, constants);
+        let link = convert_to_url(base_path, fpath);
+        parse_inner(table, link, constants);
     }
 
-    fn parse_inner(table: ElementRef, constants: &mut Vec<GmManualConstant>) -> Option<()> {
+    fn parse_inner(
+        table: ElementRef,
+        link: Url,
+        constants: &mut Vec<GmManualConstant>,
+    ) -> Option<()> {
         let table_body = table.children().nth(1).unwrap();
 
         let mut trs = table_body.children();
@@ -97,7 +103,12 @@ fn parse_constant(fpath: &Path, constants: &mut Vec<GmManualConstant>) {
         if let Some(order) = order {
             for tr in trs {
                 let mut caret = 0;
-                let mut constant_doc = GmManualConstant::default();
+                let mut constant_doc = GmManualConstant {
+                    name: String::new(),
+                    description: String::new(),
+                    secondary_description: None,
+                    link: link.clone(),
+                };
 
                 if tr.value().is_element() {
                     for td in tr.children() {

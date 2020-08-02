@@ -3,6 +3,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use url::Url;
 
 const HELPDOCS_PATH: &str = "helpdocs_keywords.json";
 
@@ -36,4 +37,32 @@ pub fn parse_fnames(dir: &Path) -> BTreeSet<PathBuf> {
             Some(path)
         })
         .collect()
+}
+
+pub fn convert_to_url(base_path: &Path, path_to_strip: &Path) -> Url {
+    let output = path_to_strip.strip_prefix(base_path).unwrap();
+
+    Url::parse(&format!(
+        "https://manual.yoyogames.com/{}",
+        output.to_str().unwrap()
+    ))
+    .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn convert_back() {
+        let path = Path::new(
+            "data/GameMaker_Language/GML_Reference/Game_Input/Mouse_Input/mouse_clear.htm",
+        );
+
+        let output = path.strip_prefix("data/").unwrap();
+
+        assert_eq!(
+            output,
+            Path::new("GameMaker_Language/GML_Reference/Game_Input/Mouse_Input/mouse_clear.htm")
+        )
+    }
 }
