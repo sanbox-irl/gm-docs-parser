@@ -160,8 +160,6 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
 
                                     header.make_ascii_lowercase();
 
-                                    println!("{:#?}", header);
-
                                     header.contains("constant")
                                 })
                                 .unwrap_or_default()
