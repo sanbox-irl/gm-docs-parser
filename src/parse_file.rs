@@ -1,12 +1,13 @@
 use crate::{FunctionDoc, GmFunctionParameter};
 use ego_tree::NodeRef;
 use log::*;
-use scraper::{html::Select, node::Element, Html, Node, Selector};
+use scraper::{html::Select, node::Element, ElementRef, Html, Node, Selector};
 // use selectors::attr::CaseSensitivity;
 use gm_docs_parser::{ConstantDoc, VariableDoc};
 use std::ops::Deref;
 use std::path::Path;
 
+#[derive(Debug)]
 pub enum DocEntry {
     Function(FunctionDoc),
     Variable(VariableDoc),
@@ -137,22 +138,43 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
                 .and_then(|table| {
                     let mut parameters = vec![];
 
-                    for tr in table.children().nth(1)?.children() {
-                        if let Node::Element(_) = tr.value() {
-                            let is_table_data = tr.children().all(|v| match v.value() {
-                                Node::Element(e) => e.name() == "td",
-                                // for the silly `\n` children
-                                Node::Text(_) => true,
-                                _ => false,
-                            });
+                    let mut trs = table.children().nth(1)?.children();
 
-                            if is_table_data {
+                    // find the header...
+                    let is_constant = trs
+                        .next()
+                        .and_then(|header| {
+                            header.children().find(|c| {
+                                if let Some(e) = c.value().as_element() {
+                                    e.name() == "th"
+                                } else {
+                                    false
+                                }
+                            })
+                        })
+                        .map(|th| {
+                            th.first_child()
+                                .map(|header_v| {
+                                    let mut header = String::new();
+                                    flatten_element_into_markdown(&header_v, &mut header);
+
+                                    header.make_ascii_lowercase();
+
+                                    println!("{:#?}", header);
+
+                                    header.contains("constant")
+                                })
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default();
+
+                    if is_constant == false {
+                        for tr in trs.into_iter().skip(1) {
+                            if tr.value().is_element() {
                                 let mut gm_parameter = GmFunctionParameter::default();
+
                                 let mut td = tr.children();
                                 td.next(); // newline
-                                           // gm_parameter.parameter =
-                                           //     td.next()?.first_child()?.value().as_text()?.to_string();
-
                                 flatten_element_into_markdown(
                                     &td.next()?,
                                     &mut gm_parameter.parameter,
@@ -433,12 +455,8 @@ fn parse_signature(sig: &str) -> (Vec<bool>, bool, bool) {
     (output, variadic, true)
 }
 
-fn parse_constants(
-    doc: &Html,
-    constant_selector: &Selector,
-    constants: &mut Vec<ConstantDoc>,
-) -> Option<()> {
-    for table in doc.select(constant_selector) {
+fn parse_constants(doc: &Html, constant_selector: &Selector, constants: &mut Vec<ConstantDoc>) {
+    fn parse_inner(table: ElementRef, constants: &mut Vec<ConstantDoc>) -> Option<()> {
         let table_body = table.children().nth(1).unwrap();
 
         let mut trs = table_body.children();
@@ -473,11 +491,11 @@ fn parse_constants(
             .unwrap_or_default();
 
         if is_constant == false {
-            continue;
+            return None;
         }
 
         for tr in trs {
-            if let Node::Element(_) = tr.value() {
+            if tr.value().is_element() {
                 let mut constant_doc = ConstantDoc::default();
                 let mut td = tr.children();
                 td.next(); // newline
@@ -489,18 +507,18 @@ fn parse_constants(
                 td.next(); // newline
 
                 let nxt = &td.next()?;
-                println!("{:#?}", nxt.value());
                 flatten_element_into_markdown(nxt, &mut constant_doc.description);
 
-                println!("{:#?}", constant_doc);
+                constants.push(constant_doc);
             }
         }
 
-        // for tr in table_body.children() {
-        // }
+        Some(())
     }
 
-    None
+    for table in doc.select(constant_selector) {
+        parse_inner(table, constants);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -577,15 +595,67 @@ mod tests {
 
     #[test]
     fn consts() {
-        fn harness(p: &str) {
+        fn harness(p: &str, output: Vec<ConstantDoc>) {
             let doc = Html::parse_document(&std::fs::read_to_string(&p).unwrap());
 
             let table_sel = Selector::parse("table").unwrap();
             let mut consts = vec![];
 
-            parse_constants(&doc, &table_sel, &mut consts).unwrap();
+            parse_constants(&doc, &table_sel, &mut consts);
+
+            assert_eq!(consts, output);
         }
 
-        harness("data\\GameMaker_Language\\GML_Reference\\Drawing\\Text\\draw_get_halign.htm");
+        harness(
+            "data/GameMaker_Language/GML_Reference/Drawing/Text/draw_get_halign.htm",
+            vec![
+                ConstantDoc {
+                    name: "fa_left".to_string(),
+                    description: "[fa_left example]\
+            (../../../../assets/Images/Scripting_Reference/GML/Reference/Drawing/fa_left.png)"
+                        .to_string(),
+                },
+                ConstantDoc {
+                    name: "fa_center".to_string(),
+                    description: "[fa_center example]\
+            (../../../../assets/Images/Scripting_Reference/GML/Reference/Drawing/fa_center.png)"
+                        .to_string(),
+                },
+                ConstantDoc {
+                    name: "fa_right".to_string(),
+                    description: "[fa_right example]\
+            (../../../../assets/Images/Scripting_Reference/GML/Reference/Drawing/fa_right.png)"
+                        .to_string(),
+                },
+            ],
+        );
+
+        harness(
+            "data/GameMaker_Language/GML_Reference/Game_Input/Mouse_Input/mouse_clear.htm",
+            vec![
+                ConstantDoc {
+                    name: "mb_left".to_string(),
+                    description: "The left mouse button".to_string(),
+                },
+                ConstantDoc {
+                    name: "mb_middle".to_string(),
+                    description:
+                        "The middle mouse button (this may not be valid for all target platforms)"
+                            .to_string(),
+                },
+                ConstantDoc {
+                    name: "mb_right".to_string(),
+                    description: "The right mouse button".to_string(),
+                },
+                ConstantDoc {
+                    name: "mb_none".to_string(),
+                    description: "No mouse button".to_string(),
+                },
+                ConstantDoc {
+                    name: "mb_any".to_string(),
+                    description: "Any of the mouse buttons".to_string(),
+                },
+            ],
+        )
     }
 }
