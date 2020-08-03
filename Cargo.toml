@@ -3,6 +3,10 @@ name = "gm-docs-parser"
 version = "1.0.0"
 authors = ["Jonathan Spira <jjspira@gmail.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "A collection of typings for GameMaker Studio 2 manual pages"
+repository = "https://github.com/sanbox-irl/gm-docs-parser"
+readme = "README.md"
 
 [lib]
 name = "gm_docs_parser"
