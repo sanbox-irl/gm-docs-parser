@@ -1,8 +1,7 @@
 #![allow(clippy::bool_comparison)]
 
 pub use gm_docs_parser::*;
-use std::path::Path;
-
+mod arg;
 mod markdown;
 mod parse_constants;
 mod parse_file;
@@ -11,15 +10,14 @@ pub use markdown::Markdown;
 
 fn main() {
     env_logger::init();
-
-    let base_path = Path::new("data");
-    let fnames = parse_fnames::parse_fnames(base_path);
+    let arguments = arg::parse_arguments();
+    let fnames = parse_fnames::parse_fnames(&arguments.path);
 
     let mut functions = vec![];
     let mut variables = vec![];
 
     for fname in fnames {
-        if let Some(success) = parse_file::parse_function_file(&fname, base_path) {
+        if let Some(success) = parse_file::parse_function_file(&fname, &arguments.path) {
             match success {
                 parse_file::DocEntry::Function(v) => {
                     functions.push(v);
@@ -32,7 +30,7 @@ fn main() {
     }
 
     let mut constants: Vec<GmManualConstant> = vec![];
-    parse_constants::parse_constants(base_path, &mut constants).unwrap();
+    parse_constants::parse_constants(&arguments.path, &mut constants).unwrap();
 
     let gm_manual = GmManual {
         functions: functions.into_iter().map(|v| (v.name.clone(), v)).collect(),
@@ -41,5 +39,9 @@ fn main() {
     };
 
     let st = serde_json::to_string_pretty(&gm_manual).unwrap();
-    println!("{}", st);
+    if let Some(output_path) = arguments.output {
+        std::fs::write(output_path, st).unwrap();
+    } else {
+        println!("{}", st);
+    }
 }

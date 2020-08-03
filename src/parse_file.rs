@@ -107,8 +107,6 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
         .and_then(|syntax| {
             let mut syntax_siblings = syntax.next_siblings();
 
-            // let mut parameter_status = vec![];
-
             syntax_siblings.next(); // skip newline
 
             // parse the signature for optionals...
@@ -116,6 +114,7 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
 
             let sig = Markdown::convert_to_markdown(&signature);
             let (mut param_guesses, mut variadic, is_function) = parse_signature(&sig);
+
             if is_function == false {
                 return Some(Data::Variable);
             }
@@ -160,7 +159,7 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
                         .unwrap_or_default();
 
                     if contains_argument {
-                        for tr in trs.into_iter().skip(1) {
+                        for tr in trs.skip(1) {
                             if tr.value().is_element() {
                                 let mut gm_parameter = GmManualFunctionParameter::default();
 
@@ -186,11 +185,11 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
                                 }
 
                                 if param_guesses.len() <= parameters.len() {
-                                    param_guesses.push(false);
+                                    param_guesses.push(Arg::Required);
                                 }
 
-                                if param_guesses[parameters.len()] == false && is_optional {
-                                    param_guesses[parameters.len()] = is_optional;
+                                if is_optional {
+                                    param_guesses[parameters.len()] = Arg::Optional;
                                 }
 
                                 parameters.push(gm_parameter);
@@ -198,8 +197,10 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
                         }
                     }
 
-                    let minimum_parameters =
-                        param_guesses.iter().position(|v| *v).unwrap_or_default();
+                    let minimum_parameters = param_guesses
+                        .iter()
+                        .position(|&v| v == Arg::Optional)
+                        .unwrap_or_else(|| param_guesses.len());
 
                     Some(Data::Function {
                         parameters,
@@ -271,13 +272,23 @@ fn parse_returns(select: &mut Select) -> Option<String> {
             returns_siblings.next(); // skip newline
             let returns = returns_siblings.next()?;
 
-            let output = Markdown::convert_to_markdown(&returns);
+            let mut output = Markdown::convert_to_markdown(&returns);
+
+            if output.starts_with("```\n") && output.ends_with("\n```") {
+                output = output[4..output.len() - 4].to_string();
+            }
 
             Some(output)
         })
 }
 
-fn parse_signature(sig: &str) -> (Vec<bool>, bool, bool) {
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum Arg {
+    Required,
+    Optional,
+}
+
+fn parse_signature(sig: &str) -> (Vec<Arg>, bool, bool) {
     let start = sig.find('(');
     let end = sig.find(')');
 
@@ -295,22 +306,22 @@ fn parse_signature(sig: &str) -> (Vec<bool>, bool, bool) {
     if end - start > 2 {
         let parameters = &sig[start + 1..end];
 
-        let mut running_optional = false;
+        let mut running_required = Arg::Required;
 
         for param in parameters.split(',') {
             let param = param.trim();
             if param.is_empty() == false {
                 if param.starts_with('[') {
-                    running_optional = true;
+                    running_required = Arg::Optional;
                 }
-                output.push(running_optional);
+                output.push(running_required);
 
                 if param.contains('[') {
-                    running_optional = true;
+                    running_required = Arg::Optional;
                 }
 
                 if param.contains(']') {
-                    running_optional = false;
+                    running_required = Arg::Required;
                 }
 
                 if param.contains("..") {

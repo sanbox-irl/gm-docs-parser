@@ -74,11 +74,10 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
                     while let Some(sibling) = th.next_sibling() {
                         if let Node::Element(e) = sibling.value() {
                             if e.name() == "th" {
-                                if let Some(next_header) = sibling.first_child().map(|v| {
-                                    let output = Markdown::convert_to_markdown(&v);
-
-                                    output
-                                }) {
+                                if let Some(next_header) = sibling
+                                    .first_child()
+                                    .map(|v| Markdown::convert_to_markdown(&v))
+                                {
                                     if next_header.to_lowercase().contains("description") {
                                         order.push(Order::Description);
                                     } else {
@@ -106,7 +105,7 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
                 let mut constant_doc = GmManualConstant {
                     name: String::new(),
                     description: String::new(),
-                    secondary_description: None,
+                    secondary_descriptors: None,
                     link: link.clone(),
                 };
 
@@ -125,8 +124,8 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
                                 }
                                 Order::Other(e) => {
                                     constant_doc
-                                        .secondary_description
-                                        .get_or_insert_with(|| Default::default())
+                                        .secondary_descriptors
+                                        .get_or_insert_with(Default::default)
                                         .insert(e.clone(), data);
                                 }
                             }
@@ -140,7 +139,7 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
                             constant_doc.name[1..constant_doc.name.len() - 1].to_owned();
                     }
 
-                    if let Some(inner) = &mut constant_doc.secondary_description {
+                    if let Some(inner) = &mut constant_doc.secondary_descriptors {
                         *inner = inner
                             .clone()
                             .into_iter()
@@ -149,11 +148,11 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
 
                         if constant_doc.description.trim().is_empty() && inner.is_empty() == false {
                             constant_doc.description =
-                                inner.remove(&inner.keys().nth(0).unwrap().clone()).unwrap();
+                                inner.remove(&inner.keys().next().unwrap().clone()).unwrap();
                         }
 
                         if inner.is_empty() {
-                            constant_doc.secondary_description = None;
+                            constant_doc.secondary_descriptors = None;
                         }
                     }
 
