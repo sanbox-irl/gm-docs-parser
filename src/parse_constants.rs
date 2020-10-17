@@ -2,11 +2,11 @@ use crate::{parse_fnames::convert_to_url, Markdown};
 use fehler::throws;
 use gm_docs_parser::*;
 use scraper::{ElementRef, Html, Node, Selector};
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 use url::Url;
 
 #[throws(Box<dyn std::error::Error>)]
-pub fn parse_constants(base_path: &Path, constants: &mut Vec<GmManualConstant>) {
+pub fn parse_constants(base_path: &Path, constants: &mut BTreeMap<String, GmManualConstant>) {
     for file in std::fs::read_dir(base_path)? {
         let file = file?;
         let file_type = file.file_type()?;
@@ -23,7 +23,11 @@ pub fn parse_constants(base_path: &Path, constants: &mut Vec<GmManualConstant>) 
 }
 
 #[allow(dead_code)]
-fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualConstant>) {
+fn parse_constant(
+    fpath: &Path,
+    base_path: &Path,
+    constants: &mut BTreeMap<String, GmManualConstant>,
+) {
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
 
     for table in doc.select(&Selector::parse("table").unwrap()) {
@@ -34,7 +38,7 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
     fn parse_inner(
         table: ElementRef,
         link: Url,
-        constants: &mut Vec<GmManualConstant>,
+        constants: &mut BTreeMap<String, GmManualConstant>,
     ) -> Option<()> {
         let table_body = table.children().nth(1).unwrap();
 
@@ -156,7 +160,7 @@ fn parse_constant(fpath: &Path, base_path: &Path, constants: &mut Vec<GmManualCo
                         }
                     }
 
-                    constants.push(constant_doc);
+                    constants.insert(constant_doc.name.clone(), constant_doc);
                 }
             }
         }

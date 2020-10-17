@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use url::Url;
 
 /// The typings for the Entire Manual. This can be read as one massive Json.
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GmManual {
     /// The built in functions within the manual created by Yyg.
     pub functions: BTreeMap<String, GmManualFunction>,
