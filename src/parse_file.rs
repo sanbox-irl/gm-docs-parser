@@ -11,27 +11,29 @@ pub enum DocEntry {
     Variable(GmManualVariable),
 }
 
-pub fn parse_function_file(fpath: &Path, base: &Path) -> Option<DocEntry> {
+pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
     trace!("{:?}", fpath);
+    let directory = fpath.parent().unwrap();
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
     let h1_sel = Selector::parse("h1").unwrap();
     let h4_sel = Selector::parse("h4").unwrap();
 
-    let name_description = parse_name_and_description(&doc, &h1_sel);
+    let name_description = parse_name_and_description(&doc, &h1_sel, &directory);
     let mut h4_select = doc.select(&h4_sel);
-    let parameters = parse_parameters(&mut h4_select).unwrap_or_else(|| Data::Function {
-        parameters: Default::default(),
-        required_parameters: 0,
-        is_variadic: false,
-    });
-    let returns = parse_returns(&mut h4_select);
-    let example = parse_example(&mut h4_select);
+    let parameters =
+        parse_parameters(&mut h4_select, &directory).unwrap_or_else(|| Data::Function {
+            parameters: Default::default(),
+            required_parameters: 0,
+            is_variadic: false,
+        });
+    let returns = parse_returns(&mut h4_select, &directory);
+    let example = parse_example(&mut h4_select, &directory);
 
     // did we fuckin nail it?
     let all_success = name_description.is_some() && example.is_some() && returns.is_some();
     if all_success {
         let (name, description) = name_description.unwrap();
-        let link = convert_to_url(base, fpath);
+        let link = convert_to_url(fpath);
 
         let output = match parameters {
             Data::Function {
@@ -70,7 +72,11 @@ pub fn parse_function_file(fpath: &Path, base: &Path) -> Option<DocEntry> {
     }
 }
 
-fn parse_name_and_description(doc: &Html, h1_sel: &Selector) -> Option<(String, String)> {
+fn parse_name_and_description(
+    doc: &Html,
+    h1_sel: &Selector,
+    dir_path: &Path,
+) -> Option<(String, String)> {
     let title = doc.select(h1_sel).next()?;
     let f_child = title.first_child()?;
     let name = f_child.value().as_text()?.to_string();
@@ -79,7 +85,7 @@ fn parse_name_and_description(doc: &Html, h1_sel: &Selector) -> Option<(String, 
     sibling_iterator.next(); // skip over the `\n`
 
     let desc = sibling_iterator.next()?;
-    let description = Markdown::convert_to_markdown(&desc);
+    let description = Markdown::convert_to_markdown(dir_path, &desc);
 
     Some((name, description))
 }
@@ -93,12 +99,12 @@ enum Data {
     Variable,
 }
 
-fn parse_parameters(select: &mut Select) -> Option<Data> {
+fn parse_parameters(select: &mut Select, dir_path: &Path) -> Option<Data> {
     select
         .find(|v| {
             v.first_child()
                 .map(|child| {
-                    let mut syntax_output = Markdown::convert_to_markdown(&child);
+                    let mut syntax_output = Markdown::convert_to_markdown(dir_path, &child);
                     syntax_output.make_ascii_lowercase();
                     syntax_output.contains("syntax")
                 })
@@ -112,7 +118,7 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
             // parse the signature for optionals...
             let signature = syntax_siblings.next()?;
 
-            let sig = Markdown::convert_to_markdown(&signature);
+            let sig = Markdown::convert_to_markdown(dir_path, &signature);
             let (mut param_guesses, mut variadic, is_function) = parse_signature(&sig);
 
             if is_function == false {
@@ -149,7 +155,8 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
                         .map(|th| {
                             th.first_child()
                                 .map(|header_v| {
-                                    let mut header = Markdown::convert_to_markdown(&header_v);
+                                    let mut header =
+                                        Markdown::convert_to_markdown(dir_path, &header_v);
                                     header.make_ascii_lowercase();
 
                                     header.contains("argument")
@@ -165,12 +172,13 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
 
                                 let mut td = tr.children();
                                 td.next(); // newline
-                                gm_parameter.parameter = Markdown::convert_to_markdown(&td.next()?);
+                                gm_parameter.parameter =
+                                    Markdown::convert_to_markdown(dir_path, &td.next()?);
 
                                 td.next(); // newline
 
                                 gm_parameter.description =
-                                    Markdown::convert_to_markdown(&td.next()?);
+                                    Markdown::convert_to_markdown(dir_path, &td.next()?);
 
                                 let is_optional = gm_parameter.parameter.contains("optional")
                                     || gm_parameter.parameter.contains("Optional")
@@ -211,12 +219,12 @@ fn parse_parameters(select: &mut Select) -> Option<Data> {
         })
 }
 
-fn parse_example(select: &mut Select) -> Option<String> {
+fn parse_example(select: &mut Select, dir_path: &Path) -> Option<String> {
     select
         .find(|v| {
             v.first_child()
                 .map(|v| {
-                    let mut example_output = Markdown::convert_to_markdown(&v);
+                    let mut example_output = Markdown::convert_to_markdown(dir_path, &v);
                     example_output.make_ascii_lowercase();
 
                     example_output.contains("example")
@@ -228,7 +236,7 @@ fn parse_example(select: &mut Select) -> Option<String> {
             example_siblings.next(); // skip newline
 
             let example = example_siblings.next()?;
-            let mut gm_example = Markdown::convert_to_markdown(&example);
+            let mut gm_example = Markdown::convert_to_markdown(dir_path, &example);
             for ex in example_siblings {
                 match ex.value() {
                     Node::Text(txt) => {
@@ -239,7 +247,7 @@ fn parse_example(select: &mut Select) -> Option<String> {
                         }
                     }
                     Node::Element(_) => {
-                        let next_one = Markdown::convert_to_markdown(&ex);
+                        let next_one = Markdown::convert_to_markdown(dir_path, &ex);
 
                         if next_one.trim().is_empty() {
                             break;
@@ -255,12 +263,12 @@ fn parse_example(select: &mut Select) -> Option<String> {
         })
 }
 
-fn parse_returns(select: &mut Select) -> Option<String> {
+fn parse_returns(select: &mut Select, dir_path: &Path) -> Option<String> {
     select
         .find(|v| {
             v.first_child()
                 .map(|v| {
-                    let mut example_output = Markdown::convert_to_markdown(&v);
+                    let mut example_output = Markdown::convert_to_markdown(dir_path, &v);
                     example_output.make_ascii_lowercase();
 
                     example_output.contains("returns")
@@ -272,7 +280,7 @@ fn parse_returns(select: &mut Select) -> Option<String> {
             returns_siblings.next(); // skip newline
             let returns = returns_siblings.next()?;
 
-            let mut output = Markdown::convert_to_markdown(&returns);
+            let mut output = Markdown::convert_to_markdown(dir_path, &returns);
 
             if output.starts_with("```\n") && output.ends_with("\n```") {
                 output = output[4..output.len() - 4].to_string();

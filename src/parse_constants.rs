@@ -25,19 +25,20 @@ pub fn parse_constants(base_path: &Path, constants: &mut BTreeMap<String, GmManu
 #[allow(dead_code)]
 fn parse_constant(
     fpath: &Path,
-    base_path: &Path,
+    directory_path: &Path,
     constants: &mut BTreeMap<String, GmManualConstant>,
 ) {
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
 
     for table in doc.select(&Selector::parse("table").unwrap()) {
-        let link = convert_to_url(base_path, fpath);
-        parse_inner(table, link, constants);
+        let link = convert_to_url(fpath);
+        parse_inner(table, link, directory_path, constants);
     }
 
     fn parse_inner(
         table: ElementRef,
         link: Url,
+        dir: &Path,
         constants: &mut BTreeMap<String, GmManualConstant>,
     ) -> Option<()> {
         let table_body = table.children().nth(1).unwrap();
@@ -63,7 +64,7 @@ fn parse_constant(
                 let is_constant = th
                     .first_child()
                     .map(|header_v| {
-                        let mut header = Markdown::convert_to_markdown(&header_v);
+                        let mut header = Markdown::convert_to_markdown(dir, &header_v);
 
                         header.make_ascii_lowercase();
 
@@ -80,7 +81,7 @@ fn parse_constant(
                             if e.name() == "th" {
                                 if let Some(next_header) = sibling
                                     .first_child()
-                                    .map(|v| Markdown::convert_to_markdown(&v))
+                                    .map(|v| Markdown::convert_to_markdown(dir, &v))
                                 {
                                     if next_header.to_lowercase().contains("description") {
                                         order.push(Order::Description);
@@ -117,7 +118,7 @@ fn parse_constant(
                     for td in tr.children() {
                         // there are Text(\n) hiddin in the trs
                         if td.value().is_element() {
-                            let data = Markdown::convert_to_markdown(&td);
+                            let data = Markdown::convert_to_markdown(dir, &td);
 
                             match &order[caret] {
                                 Order::Constant => {
@@ -141,6 +142,14 @@ fn parse_constant(
                     if constant_doc.name.starts_with('`') && constant_doc.name.ends_with('`') {
                         constant_doc.name =
                             constant_doc.name[1..constant_doc.name.len() - 1].to_owned();
+                    }
+                    if constant_doc.name.starts_with("**") && constant_doc.name.ends_with("**") {
+                        constant_doc.name =
+                            constant_doc.name[2..constant_doc.name.len() - 2].to_owned();
+                    }
+
+                    if constant_doc.name.starts_with('\\') {
+                        continue;
                     }
 
                     if let Some(inner) = &mut constant_doc.secondary_descriptors {

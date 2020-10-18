@@ -1,13 +1,24 @@
+use once_cell::sync::Lazy;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 use url::Url;
 
 const HELPDOCS_PATH: &str = "helpdocs_keywords.json";
 
-pub fn parse_fnames(dir: &Path) -> BTreeSet<PathBuf> {
+static BASE_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(Default::default);
+
+pub fn base_path() -> PathBuf {
+    (*BASE_PATH.lock().unwrap()).clone()
+}
+
+pub fn parse_fnames(dir: PathBuf) -> BTreeSet<PathBuf> {
+    let mut thing = BASE_PATH.lock().unwrap();
+    *thing = dir.clone();
+
     let path = dir.join(Path::new(HELPDOCS_PATH));
 
     let map: BTreeMap<String, PathBuf> =
@@ -39,8 +50,10 @@ pub fn parse_fnames(dir: &Path) -> BTreeSet<PathBuf> {
         .collect()
 }
 
-pub fn convert_to_url(base_path: &Path, path_to_strip: &Path) -> Url {
-    let output = path_to_strip.strip_prefix(base_path).unwrap();
+pub fn convert_to_url(path_to_strip: &Path) -> Url {
+    let output = path_to_strip
+        .strip_prefix(&*BASE_PATH.lock().unwrap())
+        .unwrap();
 
     Url::parse(&format!(
         "https://manual.yoyogames.com/{}",

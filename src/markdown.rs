@@ -1,7 +1,7 @@
 use ego_tree::NodeRef;
 use log::error;
 use scraper::{node::Element, Node};
-use std::fmt;
+use std::{fmt, path::Path, path::PathBuf};
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Markdown {
@@ -13,7 +13,12 @@ impl fmt::Display for Markdown {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let txt = self.txt.trim();
         match &self.style {
-            Style::Hyperlink(dest) => write!(f, "[{}]({})", txt, dest),
+            Style::Hyperlink(dest) => write!(
+                f,
+                " [{}]({})",
+                txt,
+                super::parse_fnames::convert_to_url(dest)
+            ),
             Style::Tooltip(dest) => write!(f, "{} ({})", txt, dest),
             Style::Plain => write!(f, "{}", txt),
             Style::Bold => write!(f, "**{}**", txt),
@@ -29,9 +34,9 @@ impl Markdown {
         Markdown { txt, style }
     }
 
-    pub fn convert_to_markdown(container: &NodeRef<Node>) -> String {
+    pub fn convert_to_markdown(directory: &Path, container: &NodeRef<Node>) -> String {
         let mut st = Vec::new();
-        Self::flatten_container(container, &mut st);
+        Self::flatten_container(container, directory, &mut st);
 
         let st = Self::simplify_markdown(st);
         let mut output = String::new();
@@ -79,7 +84,7 @@ impl Markdown {
         output
     }
 
-    fn flatten_container(container: &NodeRef<Node>, output: &mut Vec<Markdown>) {
+    fn flatten_container(container: &NodeRef<Node>, directory: &Path, output: &mut Vec<Markdown>) {
         if let Some(txt) = container.value().as_text() {
             output.push(Markdown::new(txt.to_string(), Style::Plain));
             return;
@@ -91,7 +96,7 @@ impl Markdown {
             "b" | "strong" | "h4" => Style::Bold,
             "a" => {
                 if let Some(val) = this_container.attr("href") {
-                    Style::Hyperlink(val.to_string())
+                    Style::Hyperlink(directory.join(val))
                 } else if let Some(val) = this_container.attr("class") {
                     if val == "tooltip" {
                         Style::Tooltip(val.to_string())
@@ -105,7 +110,7 @@ impl Markdown {
             }
             "img" => {
                 if let Some(val) = this_container.attr("src") {
-                    Style::Hyperlink(val.to_string())
+                    Style::Hyperlink(directory.join(val))
                 } else {
                     error!("We had an <img> with no src!");
                     Style::Plain
@@ -119,7 +124,7 @@ impl Markdown {
                 }
             }
             "tt" => Style::CodeSnippet,
-            "td" | "br" | "span" => Style::Plain,
+            "td" | "br" | "span" | "font" => Style::Plain,
             o => {
                 error!("Unknown tag encountered {}", o);
                 Style::Plain
@@ -136,7 +141,7 @@ impl Markdown {
                 }
                 Node::Element(_) => {
                     let mut buff = Vec::new();
-                    Self::flatten_container(&child, &mut buff);
+                    Self::flatten_container(&child, directory, &mut buff);
                     output.append(&mut buff);
                     wrote = true;
                 }
@@ -153,8 +158,12 @@ impl Markdown {
 
     fn flat_make_md(txt_desc: Style, e: &Element) -> Option<Markdown> {
         if let Style::Hyperlink(dest) = txt_desc {
-            e.attr("alt")
-                .map(|txt| Markdown::new(format!("[{}]({})", txt, dest), Style::Plain))
+            e.attr("alt").map(|txt| {
+                Markdown::new(
+                    format!("[{}]({})", txt, super::parse_fnames::convert_to_url(&dest)),
+                    Style::Plain,
+                )
+            })
         } else {
             None
         }
@@ -163,7 +172,7 @@ impl Markdown {
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum Style {
-    Hyperlink(String),
+    Hyperlink(PathBuf),
     Tooltip(String),
     Plain,
     Bold,
@@ -238,38 +247,74 @@ mod test {
 
         harness(
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
             ],
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
             ],
         );
 
         harness(
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
                 Markdown::new("b".to_string(), Style::Italic),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
             ],
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
                 Markdown::new("b".to_string(), Style::Italic),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
             ],
         );
 
         harness(
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
                 Markdown::new("b".to_string(), Style::Italic),
                 Markdown::new("hello".to_string(), Style::Italic),
             ],
             vec![
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
-                Markdown::new("a".to_string(), Style::Hyperlink("hey".to_string())),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
+                Markdown::new(
+                    "a".to_string(),
+                    Style::Hyperlink(Path::new("hey").to_owned()),
+                ),
                 Markdown::new("bhello".to_string(), Style::Italic),
             ],
         );
