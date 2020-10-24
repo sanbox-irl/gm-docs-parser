@@ -185,8 +185,10 @@ fn parse_parameters(select: &mut Select, dir_path: &Path) -> Option<Data> {
                                     || gm_parameter.description.contains("optional")
                                     || gm_parameter.description.contains("Optional");
 
-                                let is_variadic = gm_parameter.parameter.contains("..")
-                                    || gm_parameter.description.contains("..");
+                                let is_variadic = (gm_parameter.parameter.contains("..")
+                                    && gm_parameter.parameter.ends_with("..") == false)
+                                    || gm_parameter.description.contains("..")
+                                        && gm_parameter.description.ends_with("..") == false;
 
                                 if is_variadic && variadic == false {
                                     variadic = true;

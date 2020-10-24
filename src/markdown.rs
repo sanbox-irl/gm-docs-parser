@@ -11,7 +11,7 @@ pub struct Markdown {
 
 impl fmt::Display for Markdown {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let txt = self.txt.trim();
+        let txt = &self.txt;
         match &self.style {
             Style::Hyperlink(dest) => write!(
                 f,

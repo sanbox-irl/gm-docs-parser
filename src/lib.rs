@@ -106,7 +106,7 @@ pub struct GmManualConstant {
     /// The name of the constant
     pub name: String,
 
-    /// A description of the constant
+    /// A description of the constant. This is very rarely an empty string (only "cursor_none").
     pub description: String,
 
     /// The link to the webpage.
