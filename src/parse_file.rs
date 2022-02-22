@@ -12,22 +12,25 @@ pub enum DocEntry {
 }
 
 pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
+    if fpath.ends_with("array_delete.htm") {
+        info!("WE'RE HERE");
+    }
     trace!("{:?}", fpath);
     let directory = fpath.parent().unwrap();
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
     let h1_sel = Selector::parse("h1").unwrap();
     let h4_sel = Selector::parse("h4").unwrap();
 
-    let name_description = parse_name_and_description(&doc, &h1_sel, &directory);
+    let name_description = parse_name_and_description(&doc, &h1_sel, directory);
     let mut h4_select = doc.select(&h4_sel);
     let parameters =
-        parse_parameters(&mut h4_select, &directory).unwrap_or_else(|| Data::Function {
+        parse_parameters(&mut h4_select, directory).unwrap_or_else(|| Data::Function {
             parameters: Default::default(),
             required_parameters: 0,
             is_variadic: false,
         });
-    let returns = parse_returns(&mut h4_select, &directory);
-    let example = parse_example(&mut h4_select, &directory);
+    let returns = parse_returns(&mut h4_select, directory);
+    let example = parse_example(&mut h4_select, directory);
 
     // did we fuckin nail it?
     let all_success = name_description.is_some() && example.is_some() && returns.is_some();
@@ -79,7 +82,14 @@ fn parse_name_and_description(
 ) -> Option<(String, String)> {
     let title = doc.select(h1_sel).next()?;
     let f_child = title.first_child()?;
-    let name = f_child.value().as_text()?.to_string();
+    let name = if f_child.has_children() {
+        f_child.first_child()?.value().as_text()?.to_string()
+    } else {
+        f_child.value().as_text()?.to_string()
+    };
+
+    // trim that white space...this effects JUST display_set_gui_maximize
+    let name = name.trim().to_string();
 
     let mut sibling_iterator = title.next_siblings();
     sibling_iterator.next(); // skip over the `\n`

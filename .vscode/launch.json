@@ -7,24 +7,6 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'gm_docs_parser'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--lib",
-                    "--package=gm-docs-parser"
-                ],
-                "filter": {
-                    "name": "gm_docs_parser",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
             "name": "Debug executable 'gm-docs-parser'",
             "cargo": {
                 "args": [
@@ -37,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["/Users/Shared/GameMakerStudio2/Manual/GMS2-Robohelp-en"],
             "cwd": "${workspaceFolder}"
         },
         {

@@ -9,8 +9,4 @@ pub struct InputOpts {
     /// If oin your computer it is in a ZIP file, you will have to unzip it and then give a path
     /// to that location.
     pub input_path: PathBuf,
-
-    /// Prints version information
-    #[clap(short, long)]
-    version: bool,
 }
