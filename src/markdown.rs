@@ -192,12 +192,6 @@ impl Style {
     }
 }
 
-impl Default for Style {
-    fn default() -> Self {
-        Style::Plain
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;

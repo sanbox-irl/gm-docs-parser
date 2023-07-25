@@ -8,7 +8,7 @@ mod parse_file;
 mod parse_fnames;
 pub use markdown::Markdown;
 
-use clap::Clap;
+use clap::Parser;
 
 fn main() {
     env_logger::init();
@@ -32,6 +32,8 @@ fn main() {
     let base_path = parse_fnames::base_path();
     parse_constants::parse_constants(&base_path, &mut gm_manual.constants).unwrap();
 
-    let st = serde_json::to_string_pretty(&gm_manual).unwrap();
-    println!("{}", st.replace('\u{a0}', " "));
+    if arguments.do_not_emit {
+        let st = serde_json::to_string_pretty(&gm_manual).unwrap();
+        println!("{}", st.replace('\u{a0}', " "));
+    }
 }

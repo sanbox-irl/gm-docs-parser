@@ -17,7 +17,14 @@ pub fn parse_function_file(fpath: &Path) -> Option<DocEntry> {
     }
     trace!("{:?}", fpath);
     let directory = fpath.parent().unwrap();
-    let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
+    let txt = match std::fs::read_to_string(fpath) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("couldn't find file {:?}: {}", fpath, e);
+            return None;
+        }
+    };
+    let doc = Html::parse_document(&txt);
     let h1_sel = Selector::parse("h1").unwrap();
     let h4_sel = Selector::parse("h4").unwrap();
 
@@ -220,7 +227,7 @@ fn parse_parameters(select: &mut Select, dir_path: &Path) -> Option<Data> {
                     let minimum_parameters = param_guesses
                         .iter()
                         .position(|&v| v == Arg::Optional)
-                        .unwrap_or_else(|| param_guesses.len());
+                        .unwrap_or(param_guesses.len());
 
                     Some(Data::Function {
                         parameters,
