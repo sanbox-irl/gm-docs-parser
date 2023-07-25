@@ -32,7 +32,7 @@ fn main() {
     let base_path = parse_fnames::base_path();
     parse_constants::parse_constants(&base_path, &mut gm_manual.constants).unwrap();
 
-    if arguments.do_not_emit {
+    if arguments.do_not_emit == false {
         let st = serde_json::to_string_pretty(&gm_manual).unwrap();
         println!("{}", st.replace('\u{a0}', " "));
     }
