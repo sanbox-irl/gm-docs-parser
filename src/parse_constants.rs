@@ -1,12 +1,13 @@
 use crate::{parse_fnames::convert_to_url, Markdown};
-use fehler::throws;
 use gm_docs_parser::*;
 use scraper::{ElementRef, Html, Node, Selector};
 use std::{collections::BTreeMap, path::Path};
 use url::Url;
 
-#[throws(Box<dyn std::error::Error>)]
-pub fn parse_constants(base_path: &Path, constants: &mut BTreeMap<String, GmManualConstant>) {
+pub fn parse_constants(
+    base_path: &Path,
+    constants: &mut BTreeMap<String, GmManualConstant>,
+) -> Result<(), Box<dyn std::error::Error>> {
     for file in std::fs::read_dir(base_path)? {
         let file = file?;
         let file_type = file.file_type()?;
@@ -20,18 +21,21 @@ pub fn parse_constants(base_path: &Path, constants: &mut BTreeMap<String, GmManu
             }
         }
     }
+
+    Ok(())
 }
 
-#[allow(dead_code)]
 fn parse_constant(
     fpath: &Path,
     directory_path: &Path,
     constants: &mut BTreeMap<String, GmManualConstant>,
 ) {
+    // println!("constant path: {}", fpath.display());
     let doc = Html::parse_document(&std::fs::read_to_string(fpath).unwrap());
 
     for table in doc.select(&Selector::parse("table").unwrap()) {
         let link = convert_to_url(fpath);
+
         parse_inner(table, link, directory_path, constants);
     }
 
@@ -74,9 +78,11 @@ fn parse_constant(
 
                 if is_constant {
                     let mut order = vec![Order::Constant];
+                    // println!("starting constant parse on element: {:?}", th.value());
 
                     let mut th = th;
                     while let Some(sibling) = th.next_sibling() {
+                        // println!("sib = {:?}", sibling.value());
                         if let Node::Element(e) = sibling.value() {
                             if e.name() == "th" {
                                 if let Some(next_header) = sibling
@@ -120,18 +126,21 @@ fn parse_constant(
                         if td.value().is_element() {
                             let data = Markdown::convert_to_markdown(dir, &td);
 
-                            match &order[caret] {
-                                Order::Constant => {
+                            match order.get(caret) {
+                                Some(Order::Constant) => {
                                     constant_doc.name = data;
                                 }
-                                Order::Description => {
+                                Some(Order::Description) => {
                                     constant_doc.description = data;
                                 }
-                                Order::Other(e) => {
+                                Some(Order::Other(e)) => {
                                     constant_doc
                                         .secondary_descriptors
                                         .get_or_insert_with(Default::default)
                                         .insert(e.clone(), data);
+                                }
+                                None => {
+                                    log::error!("Failed to parse CONSTANTS at {}", link);
                                 }
                             }
                             caret += 1;
